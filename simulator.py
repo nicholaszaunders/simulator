@@ -130,13 +130,16 @@ particle_speed      = 10.0
 # Set time dilation factor for evolution of chaotic particle
 time_dilation       = 1
 
-# Define a particle class goverend by a Lorentz attractor.
+# Set particle tail time
+tail_time           = 0.2
+
+# Define a particle class governed by a Lorentz attractor.
 class particle_chaotic:
     def __init__(self, initial_position, parameters, tail_time):
         self.pos_arr       = np.zeros((int(tail_time * FRAMERATE), 3))
         self.pos_arr[0, :] = initial_position
         self.params        = parameters #[σ, ρ, β]
-        self.colour = (np.random.rand() * 255, np.random.rand() * 255, np.random.rand() * 255)
+        self.colour        = np.array([np.random.rand() * 255, np.random.rand() * 255, np.random.rand() * 255])
         
     # Method which when called gives the velocity values of the particle based 
     # on the Lorentz attractor ODE.
@@ -155,11 +158,13 @@ class particle_chaotic:
         
         newpos = self.pos_arr[0, :] + (k1 + 2 * k2 + 2 * k3 + k4) * dt / 6
         
-        self.pos_arr[1:, :]   = self.pos_arr[0:-1, :]
-        self.pos_arr[0, :]      = newpos
+        self.pos_arr[1:, :] = self.pos_arr[0:-1, :]
+        self.pos_arr[0, :]  = newpos
     
+# Initialise an empty particle array
 particle_array = []
 
+# Lookup lists for drawing cube vertices and edges.
 obj_cube = np.ones((3, 8))
 n = 0
 for i in [0,1]:
@@ -216,7 +221,7 @@ while True:
                     particle_chaotic(
                         np.array([1, 0, 0], dtype = float),
                         np.array([10, 28, 7/3], dtype = float) * rng.normal(1, 0.1, 3),
-                        2.0
+                        tail_time
                     )
                 )
                 
@@ -242,102 +247,107 @@ while True:
     pg.draw.circle(window, (0, 0, 0), origin_point, 2)
     
     # x-axis
-    x_axis_point = PERSPECTIVE_PROJECTION(np.array([100,0,0]), camera_focalplane, camera_position_render, OFFSET)
-    x_axis_2d_angle = np.arctan2(x_axis_point[1] - origin_point[1], x_axis_point[0] - origin_point[0])
-    pg.draw.line(
-        window,
-        (250, 0, 0),
-        origin_point,
-        (origin_point[0] + WINDOW_SIZE[0] * np.cos(x_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(x_axis_2d_angle))
-    )
-    x_axis_point = PERSPECTIVE_PROJECTION(np.array([-100,0,0]), camera_focalplane, camera_position_render, OFFSET)
-    x_axis_2d_angle = np.arctan2(x_axis_point[1] - origin_point[1], x_axis_point[0] - origin_point[0])
-    pg.draw.line(
-        window,
-        (150, 0, 0),
-        origin_point,
-        (origin_point[0] + WINDOW_SIZE[0] * np.cos(x_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(x_axis_2d_angle))
-    )
+    # x_axis_point = PERSPECTIVE_PROJECTION(np.array([100,0,0]), camera_focalplane, camera_position_render, OFFSET)
+    # x_axis_2d_angle = np.arctan2(x_axis_point[1] - origin_point[1], x_axis_point[0] - origin_point[0])
+    # pg.draw.line(
+    #     window,
+    #     (250, 0, 0),
+    #     origin_point,
+    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(x_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(x_axis_2d_angle))
+    # )
+    # x_axis_point = PERSPECTIVE_PROJECTION(np.array([-100,0,0]), camera_focalplane, camera_position_render, OFFSET)
+    # x_axis_2d_angle = np.arctan2(x_axis_point[1] - origin_point[1], x_axis_point[0] - origin_point[0])
+    # pg.draw.line(
+    #     window,
+    #     (150, 0, 0),
+    #     origin_point,
+    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(x_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(x_axis_2d_angle))
+    # )
     
     # y-axis
-    y_axis_point = PERSPECTIVE_PROJECTION(np.array([0,100,0]), camera_focalplane, camera_position_render, OFFSET)
-    y_axis_2d_angle = np.arctan2(y_axis_point[1] - origin_point[1], y_axis_point[0] - origin_point[0])
-    pg.draw.line(
-        window,
-        (0, 250, 0),
-        origin_point,
-        (origin_point[0] + WINDOW_SIZE[0] * np.cos(y_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(y_axis_2d_angle))
-    )
-    y_axis_point = PERSPECTIVE_PROJECTION(np.array([0,-100,0]), camera_focalplane, camera_position_render, OFFSET)
-    y_axis_2d_angle = np.arctan2(y_axis_point[1] - origin_point[1], y_axis_point[0] - origin_point[0])
-    pg.draw.line(
-        window,
-        (0, 150, 0),
-        origin_point,
-        (origin_point[0] + WINDOW_SIZE[0] * np.cos(y_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(y_axis_2d_angle))
-    )
+    # y_axis_point = PERSPECTIVE_PROJECTION(np.array([0,100,0]), camera_focalplane, camera_position_render, OFFSET)
+    # y_axis_2d_angle = np.arctan2(y_axis_point[1] - origin_point[1], y_axis_point[0] - origin_point[0])
+    # pg.draw.line(
+    #     window,
+    #     (0, 250, 0),
+    #     origin_point,
+    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(y_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(y_axis_2d_angle))
+    # )
+    # y_axis_point = PERSPECTIVE_PROJECTION(np.array([0,-100,0]), camera_focalplane, camera_position_render, OFFSET)
+    # y_axis_2d_angle = np.arctan2(y_axis_point[1] - origin_point[1], y_axis_point[0] - origin_point[0])
+    # pg.draw.line(
+    #     window,
+    #     (0, 150, 0),
+    #     origin_point,
+    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(y_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(y_axis_2d_angle))
+    # )
     
     # z-axis
-    z_axis_point = PERSPECTIVE_PROJECTION(np.array([0,0,100]), camera_focalplane, camera_position_render, OFFSET)
-    z_axis_2d_angle = np.arctan2(z_axis_point[1] - origin_point[1], z_axis_point[0] - origin_point[0])
-    pg.draw.line(
-        window,
-        (0, 0, 250),
-        origin_point,
-        (origin_point[0] + WINDOW_SIZE[0] * np.cos(z_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(z_axis_2d_angle))
-    )
-    z_axis_point = PERSPECTIVE_PROJECTION(np.array([0,0,-100]), camera_focalplane, camera_position_render, OFFSET)
-    z_axis_2d_angle = np.arctan2(z_axis_point[1] - origin_point[1], z_axis_point[0] - origin_point[0])
-    pg.draw.line(
-        window,
-        (0, 0, 50),
-        origin_point,
-        (origin_point[0] + WINDOW_SIZE[0] * np.cos(z_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(z_axis_2d_angle))
-    )
+    # z_axis_point = PERSPECTIVE_PROJECTION(np.array([0,0,100]), camera_focalplane, camera_position_render, OFFSET)
+    # z_axis_2d_angle = np.arctan2(z_axis_point[1] - origin_point[1], z_axis_point[0] - origin_point[0])
+    # pg.draw.line(
+    #     window,
+    #     (0, 0, 250),
+    #     origin_point,
+    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(z_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(z_axis_2d_angle))
+    # )
+    # z_axis_point = PERSPECTIVE_PROJECTION(np.array([0,0,-100]), camera_focalplane, camera_position_render, OFFSET)
+    # z_axis_2d_angle = np.arctan2(z_axis_point[1] - origin_point[1], z_axis_point[0] - origin_point[0])
+    # pg.draw.line(
+    #     window,
+    #     (0, 0, 50),
+    #     origin_point,
+    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(z_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(z_axis_2d_angle))
+    # )
     
     # Tick forward all particles and draw
     for i, particle_instance in enumerate(particle_array):
-        j = 0
-        while j < len(particle_instance.pos_arr):
-            position = particle_instance.pos_arr[j]
+        for j, position in enumerate(particle_instance.pos_arr[:-1]):
                 
-            pg.draw.circle(
-                window,
-                particle_instance.colour,
-                PERSPECTIVE_PROJECTION(position, camera_focalplane, camera_position_render, OFFSET),
-                3
-            )
+            colour = (1 - j/(tail_time * FRAMERATE)) * particle_instance.colour + j/(tail_time * FRAMERATE) * np.array([255, 255, 255])
             
-            j += 1
+            # pg.draw.circle(
+            #     window,
+            #     particle_instance.colour,
+            #     PERSPECTIVE_PROJECTION(position, camera_focalplane, camera_position_render, OFFSET),
+            #     3
+            # )
+            pg.draw.aalines(
+                window,
+                tuple(colour),
+                False,
+                [PERSPECTIVE_PROJECTION(particle_instance.pos_arr[j], camera_focalplane, camera_position_render, OFFSET),
+                 PERSPECTIVE_PROJECTION(particle_instance.pos_arr[j + 1], camera_focalplane, camera_position_render, OFFSET)]
+            )
                 
         particle_instance.tick_forward(FRAMERATE * time_dilation)
         
      
     
     # # Draw unit cube vertices
-    for i in range(np.shape(obj_cube)[1]):
-        projected_point = PERSPECTIVE_PROJECTION(obj_cube[:, i], camera_focalplane, camera_position_render, OFFSET)
-        pg.draw.circle(
-            window, 
-            (255, 0, 0), 
-            projected_point, 
-            5
-        )
+    # for i in range(np.shape(obj_cube)[1]):
+    #     projected_point = PERSPECTIVE_PROJECTION(obj_cube[:, i], camera_focalplane, camera_position_render, OFFSET)
+    #     pg.draw.circle(
+    #         window, 
+    #         (255, 0, 0), 
+    #         projected_point, 
+    #         5
+    #     )
    
     # # Draw unit cube edges
-    i = 1
-    while i < np.shape(obj_cube_edges)[0]:
-        input_point_1       = obj_cube_edges[i - 1, :]
-        input_point_2       = obj_cube_edges[i, :]
-        projected_point_1   = PERSPECTIVE_PROJECTION(input_point_1, camera_focalplane, camera_position_render, OFFSET)
-        projected_point_2   = PERSPECTIVE_PROJECTION(input_point_2, camera_focalplane, camera_position_render, OFFSET)
-        pg.draw.line(
-            window, 
-            (100, 100, 100), 
-            projected_point_1, 
-            projected_point_2
-        )
-        i += 1
+    # i = 1
+    # while i < np.shape(obj_cube_edges)[0]:
+    #     input_point_1       = obj_cube_edges[i - 1, :]
+    #     input_point_2       = obj_cube_edges[i, :]
+    #     projected_point_1   = PERSPECTIVE_PROJECTION(input_point_1, camera_focalplane, camera_position_render, OFFSET)
+    #     projected_point_2   = PERSPECTIVE_PROJECTION(input_point_2, camera_focalplane, camera_position_render, OFFSET)
+    #     pg.draw.line(
+    #         window, 
+    #         (100, 100, 100), 
+    #         projected_point_1, 
+    #         projected_point_2
+    #     )
+    #     i += 1
     
     # Update window.
     pg.display.update()
