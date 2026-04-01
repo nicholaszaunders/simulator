@@ -4,6 +4,14 @@ The University of Queensland
 
 3D real-time renderer system for physics simulations in Python using PyGame's 
 rendering engine.
+
+TO DO:
+    - Fix slight warping on axes when viewing at 45 degree angles
+    - Speedup evaluation
+    - Add method for showing / not showing axes and origin points
+    - Streamline rendering by introducing a buffer for rendered points
+    - Add camera position globe and text for reference
+    - Generalise camera to point in arbitrary directions
 ----------------------------------------------------------------------------"""
 
 import numpy as np
@@ -112,9 +120,9 @@ def PERSPECTIVE_PROJECTION(
 #%% Main loop initialisation
 
 # Set initial camera position
-camera_radius       = 600 #1000
-camera_theta        = 1.4314285714285735#0
-camera_phi          = 0.8518267348260169#np.pi/4
+camera_radius       = 750 #1000
+camera_theta        = 1.4764285714285723
+camera_phi          = -0.415673265173984
 field_of_vision     = 20
 
 # Buffer array for mouse position delta
@@ -133,6 +141,9 @@ time_dilation       = 1
 # Set particle tail time
 tail_time           = 0.2
 
+# Int flag to set whether axes and context cube appears (initial value False)
+axis_cubes_visible  = False
+
 # Define a particle class governed by a Lorentz attractor.
 class particle_chaotic:
     def __init__(self, initial_position, parameters, tail_time):
@@ -141,8 +152,7 @@ class particle_chaotic:
         self.params        = parameters #[σ, ρ, β]
         self.colour        = np.array([np.random.rand() * 255, np.random.rand() * 255, np.random.rand() * 255])
         
-    # Method which when called gives the velocity values of the particle based 
-    # on the Lorentz attractor ODE.
+    # Gives the velocity values of the particle based on the Lorentz attractor ODE.
     def particle_ode(self, pos):
         dx = (self.params[0] * (pos[1] - pos[0]))
         dy = (pos[0] * (self.params[1] - pos[2]) - pos[1])
@@ -162,46 +172,69 @@ class particle_chaotic:
         self.pos_arr[0, :]  = newpos
     
 # Initialise an empty particle array
-particle_array = []
+PARTICLE_ARRAY = []
 
-# Lookup lists for drawing cube vertices and edges.
-obj_cube = np.ones((3, 8))
-n = 0
-for i in [0,1]:
-    for j in [0,1]:
-        for k in [0,1]:
-            obj_cube[:, n] = np.array([(-1)**i, (-1)**j, (-1)**k]) * 50
-            n += 1
 
-obj_cube_edges = np.array([    
-    [1, 1, 1],
-    [-1, 1, 1],
-    [-1, -1, 1],
-    [1, -1, 1],
-    [1, 1, 1],
-    [1, 1, 1],
-    [1, 1, -1],
-    [1, 1, 1],
-    [-1, 1, 1],
-    [-1, 1, -1],
-    [-1, 1, 1],
-    [-1, -1, 1],
-    [-1, -1, -1],
-    [-1, -1, 1],
-    [1, -1, 1],
-    [1, -1, -1],
-    [1, 1, -1],
-    [-1, 1, -1],
-    [-1, -1, -1],
-    [1, -1, -1],
-]) * 50
+
+# Define a new class which takes in static objects and renders them in a
+# sequential pipeline.
+# Essentially should be a list of `objects' defined by vertices and edge
+# connections joining pairs of vertices.
+
+# Initialise an empty queue for static objects
+STATIC_OBJECT_QUEUE = []
+
+# Define a generic static object with arbitrary vertices and edges.
+# 'vertices' is a 3xN array defining N points in 3D space; each column is x,y,z.
+# 'edges' is a 2xM array where each column holds the indices of the two points
+# (relative to the array vertices) that should be connected by a line.
+# Also takes an optional name 'ident'.
+class STATIC_OBJECT:
+    def __init__(self, vert, edge, iden):
+        self.vert = vert
+        self.edge = edge
+        self.iden = iden
+
+# Define a class enumerating edges and vertices of a static cube of side length d.
+class CUBE:
+    def __init__(self, iden, d):
+        self.vert = np.array([[ 1.,  1.,  1.,  1., -1., -1., -1., -1.],
+                              [ 1.,  1., -1., -1.,  1.,  1., -1., -1.],
+                              [ 1., -1.,  1., -1.,  1., -1.,  1., -1.]],
+                             dtype = float) * d/2
+        
+        self.edge = np.array([[ 0,   1,   3,   2,   4,   5,   7,   6,   0,   1,   2,   3],
+                              [ 1,   3,   2,   0,   5,   7,   6,   4,   4,   5,   6,   7]],
+                             dtype = int)
+        
+        self.iden = iden
+
+# Define a class for drawing traditional Cartesian x,y,z axes. Takes a flag "x",
+# "y" or "z" to specify which axis is being drawn.
+class AXIS:
+    def __init__(self, iden, axis):
+        
+        if axis not in ["x", "y", "z"]:
+            raise Exception("Improper axis flag specified.")
+        
+        axisDict = {"x":0, "y":1, "z":2}
+        self.vert = np.zeros((3, 2), dtype = float)
+        self.vert[axisDict[axis], 0] = -1000
+        self.vert[axisDict[axis], 1] =  1000
+        
+        self.edge = np.array([[0],
+                              [1]],
+                             dtype = int)
+        
+        self.iden = iden
+
 
 #%% Main loop
 
 while True:
     
-    # Wipe the screen
-    window.fill((255,255,255))
+    # Wipe the screen by filling with a set colour
+    window.fill((0, 0, 0))
     
     mouseX, mouseY = pg.mouse.get_pos()
     mouse_pos_buffer[0, :] = mouse_pos_buffer[1, :]
@@ -217,7 +250,7 @@ while True:
         # Spawn Lorentz attractor particle with randomised parameters
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_SPACE:
-                particle_array.append(
+                PARTICLE_ARRAY.append(
                     particle_chaotic(
                         np.array([1, 0, 0], dtype = float),
                         np.array([10, 28, 7/3], dtype = float) * rng.normal(1, 0.1, 3),
@@ -227,6 +260,26 @@ while True:
                 
             if event.key == pg.K_RALT:
                 print(f"R is {camera_radius}, theta is {camera_theta}, phi is {camera_phi}")
+                
+            # Wipe all spawned attractors    
+            if event.key == pg.K_ESCAPE:
+                PARTICLE_ARRAY = []
+                
+            # Toggle cube and axis lines.
+            # Note: an efficiency hack to stop us having to search for the context
+            # cube and axes whenever RSHIFT is pressed is to put them at the top 
+            # of the static object queue. To stop showing them, we just pop the 
+            # top four items. But I can't spawn an item before these or it'll break.
+            if event.key == pg.K_RSHIFT:
+                axis_cubes_visible = not axis_cubes_visible
+                if axis_cubes_visible == True:
+                    STATIC_OBJECT_QUEUE.insert(0, CUBE("contextcube", 100))
+                    STATIC_OBJECT_QUEUE.insert(0, AXIS("xaxis", "x"))
+                    STATIC_OBJECT_QUEUE.insert(0, AXIS("yaxis", "y"))
+                    STATIC_OBJECT_QUEUE.insert(0, AXIS("zaxis", "z"))
+                else:
+                    del STATIC_OBJECT_QUEUE[:4]
+                    
                     
         if event.type == pg.MOUSEWHEEL:
                 camera_radius += event.y * mouse_scroll_sens
@@ -239,79 +292,39 @@ while True:
     if pg.mouse.get_pressed()[0]:
         camera_theta += mouse_sens * (mouse_pos_buffer[1, 1] - mouse_pos_buffer[0, 1]) / (np.linalg.norm(camera_position_render)  - camera_focalplane)
         camera_phi   += mouse_sens * (mouse_pos_buffer[1, 0] - mouse_pos_buffer[0, 0]) / (np.linalg.norm(camera_position_render)  - camera_focalplane)
-
     
-    # Draw origin and x,y,z lines relative to camera
-    # origin
-    origin_point = PERSPECTIVE_PROJECTION(np.array([0,0,0]), camera_focalplane, camera_position_render, OFFSET)
-    pg.draw.circle(window, (0, 0, 0), origin_point, 2)
     
-    # x-axis
-    # x_axis_point = PERSPECTIVE_PROJECTION(np.array([100,0,0]), camera_focalplane, camera_position_render, OFFSET)
-    # x_axis_2d_angle = np.arctan2(x_axis_point[1] - origin_point[1], x_axis_point[0] - origin_point[0])
-    # pg.draw.line(
-    #     window,
-    #     (250, 0, 0),
-    #     origin_point,
-    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(x_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(x_axis_2d_angle))
-    # )
-    # x_axis_point = PERSPECTIVE_PROJECTION(np.array([-100,0,0]), camera_focalplane, camera_position_render, OFFSET)
-    # x_axis_2d_angle = np.arctan2(x_axis_point[1] - origin_point[1], x_axis_point[0] - origin_point[0])
-    # pg.draw.line(
-    #     window,
-    #     (150, 0, 0),
-    #     origin_point,
-    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(x_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(x_axis_2d_angle))
-    # )
-    
-    # y-axis
-    # y_axis_point = PERSPECTIVE_PROJECTION(np.array([0,100,0]), camera_focalplane, camera_position_render, OFFSET)
-    # y_axis_2d_angle = np.arctan2(y_axis_point[1] - origin_point[1], y_axis_point[0] - origin_point[0])
-    # pg.draw.line(
-    #     window,
-    #     (0, 250, 0),
-    #     origin_point,
-    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(y_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(y_axis_2d_angle))
-    # )
-    # y_axis_point = PERSPECTIVE_PROJECTION(np.array([0,-100,0]), camera_focalplane, camera_position_render, OFFSET)
-    # y_axis_2d_angle = np.arctan2(y_axis_point[1] - origin_point[1], y_axis_point[0] - origin_point[0])
-    # pg.draw.line(
-    #     window,
-    #     (0, 150, 0),
-    #     origin_point,
-    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(y_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(y_axis_2d_angle))
-    # )
-    
-    # z-axis
-    # z_axis_point = PERSPECTIVE_PROJECTION(np.array([0,0,100]), camera_focalplane, camera_position_render, OFFSET)
-    # z_axis_2d_angle = np.arctan2(z_axis_point[1] - origin_point[1], z_axis_point[0] - origin_point[0])
-    # pg.draw.line(
-    #     window,
-    #     (0, 0, 250),
-    #     origin_point,
-    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(z_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(z_axis_2d_angle))
-    # )
-    # z_axis_point = PERSPECTIVE_PROJECTION(np.array([0,0,-100]), camera_focalplane, camera_position_render, OFFSET)
-    # z_axis_2d_angle = np.arctan2(z_axis_point[1] - origin_point[1], z_axis_point[0] - origin_point[0])
-    # pg.draw.line(
-    #     window,
-    #     (0, 0, 50),
-    #     origin_point,
-    #     (origin_point[0] + WINDOW_SIZE[0] * np.cos(z_axis_2d_angle), origin_point[1] + WINDOW_SIZE[1] * np.sin(z_axis_2d_angle))
-    # )
+    # Draw static objects
+    for static_object in STATIC_OBJECT_QUEUE:
+        for i in range(static_object.vert.shape[1]):
+            pg.draw.circle(
+                window, 
+                (255, 0, 0), 
+                PERSPECTIVE_PROJECTION(static_object.vert[:, i], camera_focalplane, camera_position_render, OFFSET), 
+                5
+            )
+        for i in range(static_object.edge.shape[1]):
+            pg.draw.line(
+                window, 
+                (100, 100, 100), 
+                PERSPECTIVE_PROJECTION(static_object.vert[:, static_object.edge[0, i]], camera_focalplane, camera_position_render, OFFSET),
+                PERSPECTIVE_PROJECTION(static_object.vert[:, static_object.edge[1, i]], camera_focalplane, camera_position_render, OFFSET) 
+            )
+            
+        
     
     # Tick forward all particles and draw
-    for i, particle_instance in enumerate(particle_array):
+    for particle_instance in PARTICLE_ARRAY:
         for j, position in enumerate(particle_instance.pos_arr[:-1]):
                 
             colour = (1 - j/(tail_time * FRAMERATE)) * particle_instance.colour + j/(tail_time * FRAMERATE) * np.array([255, 255, 255])
             
-            # pg.draw.circle(
-            #     window,
-            #     particle_instance.colour,
-            #     PERSPECTIVE_PROJECTION(position, camera_focalplane, camera_position_render, OFFSET),
-            #     3
-            # )
+            pg.draw.circle(
+                window,
+                (255, 255, 255),
+                PERSPECTIVE_PROJECTION(particle_instance.pos_arr[0], camera_focalplane, camera_position_render, OFFSET),
+                3
+            )
             pg.draw.aalines(
                 window,
                 tuple(colour),
@@ -322,32 +335,6 @@ while True:
                 
         particle_instance.tick_forward(FRAMERATE * time_dilation)
         
-     
-    
-    # # Draw unit cube vertices
-    # for i in range(np.shape(obj_cube)[1]):
-    #     projected_point = PERSPECTIVE_PROJECTION(obj_cube[:, i], camera_focalplane, camera_position_render, OFFSET)
-    #     pg.draw.circle(
-    #         window, 
-    #         (255, 0, 0), 
-    #         projected_point, 
-    #         5
-    #     )
-   
-    # # Draw unit cube edges
-    # i = 1
-    # while i < np.shape(obj_cube_edges)[0]:
-    #     input_point_1       = obj_cube_edges[i - 1, :]
-    #     input_point_2       = obj_cube_edges[i, :]
-    #     projected_point_1   = PERSPECTIVE_PROJECTION(input_point_1, camera_focalplane, camera_position_render, OFFSET)
-    #     projected_point_2   = PERSPECTIVE_PROJECTION(input_point_2, camera_focalplane, camera_position_render, OFFSET)
-    #     pg.draw.line(
-    #         window, 
-    #         (100, 100, 100), 
-    #         projected_point_1, 
-    #         projected_point_2
-    #     )
-    #     i += 1
     
     # Update window.
     pg.display.update()
